@@ -1,4 +1,4 @@
-tested on windows 10 (only)
+tested on windows 10 (only) - does not use cmd nor powershell
 
 Checks installed applications with `wmic product get Name, Version, InstallLocation`
 Checks scheduled tasks with `schtasks /query /fo LIST /v`
