@@ -1,0 +1,136 @@
+<html>
+<head>
+    <title>System Check Tool</title>
+    <HTA:APPLICATION 
+        ID="SystemCheckHTA"
+        APPLICATIONNAME="System Check"
+        BORDER="thin"
+        SCROLL="no"
+        SINGLEINSTANCE="yes"
+        WINDOWSTATE="normal"
+    />
+    <script language="JScript">
+        function getTimestamp() {
+            var now = new Date();
+            return now.getFullYear() + "-" +
+                   ("0" + (now.getMonth() + 1)).slice(-2) + "-" +
+                   ("0" + now.getDate()).slice(-2) + "_" +
+                   ("0" + now.getHours()).slice(-2) + "-" +
+                   ("0" + now.getMinutes()).slice(-2) + "-" +
+                   ("0" + now.getSeconds()).slice(-2);
+        }
+
+        function getCurrentDirectory() {
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var scriptPath = document.location.pathname;
+            scriptPath = scriptPath.replace(/\//g, "\\"); // Convert to Windows path format
+            scriptPath = scriptPath.replace(/^\\/, ""); // Remove leading slash if present
+            var folderPath = fso.GetParentFolderName(scriptPath);
+            return folderPath;
+        }
+
+        function runCommand(command) {
+            var shell = new ActiveXObject("WScript.Shell");
+            var exec = shell.Exec(command);
+            var output = "";
+            output = exec.StdOut.ReadAll();
+            return output;
+        }
+		
+		function trimString(str) {
+			var start = 0;
+			var end = str.length - 1;
+
+			// Remove leading spaces
+			while (str[start] == " " || str[start] == "\t") {
+				start++;
+			}
+
+			// Remove trailing spaces
+			while (str[end] == " " || str[end] == "\t") {
+				end--;
+			}
+
+			// Return the trimmed string
+			return str.slice(start, end + 1);
+		}
+
+
+
+        function checkSystem() {
+            document.getElementById("status").innerHTML = "Running installed applications checks...<br>";
+
+            var timestamp = getTimestamp();
+
+            // Check installed applications via WMIC
+            wmicOutput = "=== Installed Applications ===\nGenerated on: " + new Date().toLocaleString() + "\n\n";
+            var wmicCommand = 'wmic product get Name, Version, InstallLocation';
+            var appOutput = runCommand(wmicCommand);
+			wmicOutput += appOutput;
+			
+            // Save wmicOutput to file (installed applications)
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var savePath = getCurrentDirectory() + "\\installed_applications_" + timestamp + ".txt";
+            var file = fso.CreateTextFile(savePath, true);
+            file.Write(wmicOutput);
+            file.Close();
+            document.getElementById("status").innerHTML += "Saved: " + savePath + "<br>installed applications check completed!<br>";
+            document.getElementById("status").innerHTML += "Running scheduled task checks...<br>";
+			
+            // Check scheduled tasks via schtasks
+            schtasksOutput = "=== Scheduled Task ===\nGenerated on: " + new Date().toLocaleString() + "\n\n";
+            var schtasksCommand = 'schtasks /query /fo LIST /v';
+            var taskOutput = runCommand(schtasksCommand);
+			schtasksOutput += taskOutput;
+
+            // Save output to file (scheduled tasks)
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var savePath = getCurrentDirectory() + "\\scheduled_tasks_" + timestamp + ".txt";
+            var file = fso.CreateTextFile(savePath, true);
+            file.Write(schtasksOutput);
+            file.Close();
+			document.getElementById("status").innerHTML += "Saved: " + savePath + "<br>scheduled task check completed!<br>";
+			
+			document.getElementById("status").innerHTML += "Running file permission checks...<br>";
+
+			// Check file permissions via icacls for all found applications
+            icaclsOutput = "=== File Permissions for each installed applications ===\n";
+			var apps = appOutput.split("\n");
+			permOutput = ''
+
+            for (var i = 1; i < apps.length; i++) {
+                var appDetails = trimString(apps[i].split(/\s{3,}/));
+                if (appDetails.length < 3) continue;  // Skip if the line doesn't have enough data
+				
+                var appPath = appDetails[0] || "";
+				var appName = appDetails[1] || "Unknown App";
+                var appVersion = appDetails[2] || "Unknown Version";
+                if (appPath) {
+                    var permissions = runCommand('icacls "' + appPath.slice(0, -1) + '"');
+                    permOutput += appName + " (Version: " + appVersion + ")\n";
+                    permOutput += "Path: " + appPath + "\n";
+                    permOutput += "Permissions: \n" + permissions + "\n\n";
+                }
+            }
+
+            icaclsOutput += permOutput + "\n\n";
+			
+            // Save output to file
+            var fso = new ActiveXObject("Scripting.FileSystemObject");
+            var savePath = getCurrentDirectory() + "\\file_permission_" + timestamp + ".txt";
+            var file = fso.CreateTextFile(savePath, true);
+            file.Write(icaclsOutput);
+            file.Close();
+			
+			document.getElementById("status").innerHTML += "Saved: " + savePath + "<br>scheduled task check completed!<br>";
+			document.getElementById("status").innerHTML += "All checks done<br>";
+
+        }
+    </script>
+</head>
+<body>
+    <h2>Windows System Check Tool</h2>
+    <button onclick="checkSystem()">Check System</button>
+    <p id="status"></p>
+</body>
+</html>
